@@ -1,0 +1,453 @@
+"use client"
+
+import Link from "next/link"
+import type React from "react"
+import { useState, useEffect } from "react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
+import { useToast } from "@/hooks/use-toast"
+import { useIsMobile } from "@/hooks/use-mobile"
+import { brandModels } from "@/lib/brand-models"
+import { parts } from "@/lib/parts"
+
+interface RequestQuoteFormProps {
+  initialPart?: string
+}
+
+export function RequestQuoteForm({ initialPart }: RequestQuoteFormProps) {
+  const { toast } = useToast()
+  const isMobile = useIsMobile()
+  const [make, setMake] = useState("")
+  const [model, setModel] = useState("")
+  const [year, setYear] = useState("")
+  const [part, setPart] = useState(initialPart || "")
+  const [quantity, setQuantity] = useState("1")
+  const [name, setName] = useState("")
+  const [email, setEmail] = useState("")
+  const [contact, setContact] = useState("")
+  const [zip, setZip] = useState("")
+  const [vin, setVin] = useState("")
+  const [notes, setNotes] = useState("")
+  const [website] = useState("dailyautoparts.com")
+  const [gdprConsent, setGdprConsent] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
+
+  const years = Array.from({ length: 2026 - 1985 + 1 }, (_, i) => (2026 - i).toString())
+  const availableModels: string[] = make ? brandModels[make] || [] : []
+
+  useEffect(() => {
+    if (make) {
+      setModel("")
+    }
+  }, [make])
+
+  const validate = () => {
+    const newErrors: Record<string, string> = {}
+
+    if (!make) newErrors.make = "Make is required"
+    if (!model) newErrors.model = "Model is required"
+    if (!year) newErrors.year = "Year is required"
+    if (!part) newErrors.part = "Part is required"
+    if (!name) newErrors.name = "Name is required"
+    if (!email && !contact) newErrors.contact = "Email or contact number is required"
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      newErrors.email = "Invalid email format"
+    }
+    if (contact && !/^\d{10,}$/.test(contact.replace(/\D/g, ""))) {
+      newErrors.contact = "Contact number must be at least 10 digits"
+    }
+    if (!zip) newErrors.zip = "ZIP/Postal code is required"
+    if (Number.parseInt(quantity) < 1) newErrors.quantity = "Quantity must be at least 1"
+    if (!gdprConsent) newErrors.gdpr = "You must agree to the privacy policy"
+
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!validate()) {
+      toast({
+        title: "Validation Error",
+        description: "Please fix the errors in the form",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      // Create FormData object to send to the API
+      const formData = new FormData()
+      formData.append("make", make)
+      formData.append("model", model)
+      formData.append("year", year)
+      formData.append("part", part)
+      formData.append("quantity", quantity)
+      formData.append("name", name)
+      formData.append("email", email)
+      formData.append("contact", contact)
+      formData.append("zip", zip)
+      formData.append("vin", vin)
+      formData.append("notes", notes)
+      formData.append("website", website)
+      formData.append("formType", "request-quote-form")
+
+      // Send the data to our API endpoint
+      const response = await fetch("/api/google-form-proxy", {
+        method: "POST",
+        body: formData
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to submit form")
+      }
+
+      setSubmitted(true)
+      toast({
+        title: "Quote Request Received!",
+        description: "Thanks! A parts specialist will contact you shortly.",
+      })
+
+      if (typeof window !== "undefined" && (window as any).gtag) {
+        ;(window as any).gtag("event", "lead_submit", {
+          make: make,
+          model,
+          year,
+          part,
+        })
+      }
+    } catch (error) {
+      console.error("Error submitting form:", error)
+      toast({
+        title: "Submission Error",
+        description: "There was a problem submitting your request. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  if (submitted) {
+    return (
+      <div className="rounded-lg bg-muted/20 p-6 text-center">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+          <svg className="h-6 w-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <h3 className="mb-2 text-lg font-bold">Quote Request Received!</h3>
+        <p className="mb-4 text-muted-foreground">
+          Thank you! A parts specialist will contact you shortly with a quote.
+        </p>
+        <div className="rounded-md bg-background p-4 text-left border">
+          <h4 className="font-medium">Your Request Summary:</h4>
+          <div className="mt-2 space-y-1 text-sm">
+            <p><span className="font-medium">Vehicle:</span> {year} {make} {model}</p>
+            <p><span className="font-medium">Part:</span> {part}</p>
+            <p><span className="font-medium">Quantity:</span> {quantity}</p>
+            <p><span className="font-medium">Contact:</span> {name}</p>
+          </div>
+        </div>
+        <Button onClick={() => setSubmitted(false)} className="mt-4 w-full">
+          Submit Another Request
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <div className="space-y-4">
+        <h3 className="font-semibold text-lg">Vehicle Information</h3>
+        
+        {isMobile ? (
+          <>
+            {/* Mobile Layout */}
+            {/* Row 1: Vehicle Make and Vehicle Model */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="make">Vehicle Make *</Label>
+                <Select value={make} onValueChange={setMake}>
+                  <SelectTrigger id="make" className={errors.make ? "border-destructive" : ""}>
+                    <SelectValue placeholder="Select make" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.keys(brandModels).map((b: string) => (
+                      <SelectItem key={b} value={b}>{b}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.make && <p className="text-sm text-destructive">{errors.make}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="model">Vehicle Model *</Label>
+                <Select value={model} onValueChange={setModel} disabled={!make}>
+                  <SelectTrigger id="model" className={errors.model ? "border-destructive" : ""}>
+                    <SelectValue placeholder="Select model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableModels.map((m: string) => (
+                      <SelectItem key={m} value={m}>{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.model && <p className="text-sm text-destructive">{errors.model}</p>}
+              </div>
+            </div>
+
+            {/* Row 2: Year and Quantity */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="year">Year *</Label>
+                <Select value={year} onValueChange={setYear}>
+                  <SelectTrigger id="year" className={errors.year ? "border-destructive" : ""}>
+                    <SelectValue placeholder="Select year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {years.map((y: string) => (
+                      <SelectItem key={y} value={y}>{y}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.year && <p className="text-sm text-destructive">{errors.year}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="quantity">Quantity</Label>
+                <Input
+                  id="quantity"
+                  type="number"
+                  min="1"
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                  className={errors.quantity ? "border-destructive" : ""}
+                />
+                {errors.quantity && <p className="text-sm text-destructive">{errors.quantity}</p>}
+              </div>
+            </div>
+
+            {/* Row 3: Part Needed and VIN Number */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="part">Part Needed *</Label>
+                <Select value={part} onValueChange={setPart}>
+                  <SelectTrigger id="part" className={errors.part ? "border-destructive" : ""}>
+                    <SelectValue placeholder="Select part" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {parts.map((p: string) => (
+                      <SelectItem key={p} value={p}>{p}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.part && <p className="text-sm text-destructive">{errors.part}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="vin">VIN Number (Optional)</Label>
+                <Input
+                  id="vin"
+                  value={vin}
+                  onChange={(e) => setVin(e.target.value)}
+                  placeholder="Enter VIN for better part matching"
+                  maxLength={17}
+                />
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Desktop Layout - Original layout */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="make">Vehicle Make *</Label>
+                <Select value={make} onValueChange={setMake}>
+                  <SelectTrigger id="make" className={errors.make ? "border-destructive" : ""}>
+                    <SelectValue placeholder="Select make" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.keys(brandModels).map((b: string) => (
+                      <SelectItem key={b} value={b}>{b}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.make && <p className="text-sm text-destructive">{errors.make}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="model">Vehicle Model *</Label>
+                <Select value={model} onValueChange={setModel} disabled={!make}>
+                  <SelectTrigger id="model" className={errors.model ? "border-destructive" : ""}>
+                    <SelectValue placeholder="Select model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableModels.map((m: string) => (
+                      <SelectItem key={m} value={m}>{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.model && <p className="text-sm text-destructive">{errors.model}</p>}
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="year">Year *</Label>
+                <Select value={year} onValueChange={setYear}>
+                  <SelectTrigger id="year" className={errors.year ? "border-destructive" : ""}>
+                    <SelectValue placeholder="Select year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {years.map((y: string) => (
+                      <SelectItem key={y} value={y}>{y}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.year && <p className="text-sm text-destructive">{errors.year}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="quantity">Quantity</Label>
+                <Input
+                  id="quantity"
+                  type="number"
+                  min="1"
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                  className={errors.quantity ? "border-destructive" : ""}
+                />
+                {errors.quantity && <p className="text-sm text-destructive">{errors.quantity}</p>}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="part">Part Needed *</Label>
+              <Select value={part} onValueChange={setPart}>
+                <SelectTrigger id="part" className={errors.part ? "border-destructive" : ""}>
+                  <SelectValue placeholder="Select part" />
+                </SelectTrigger>
+                <SelectContent>
+                  {parts.map((p: string) => (
+                    <SelectItem key={p} value={p}>{p}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.part && <p className="text-sm text-destructive">{errors.part}</p>}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="vin">VIN Number (Optional)</Label>
+              <Input
+                id="vin"
+                value={vin}
+                onChange={(e) => setVin(e.target.value)}
+                placeholder="Enter VIN for better part matching"
+                maxLength={17}
+              />
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="space-y-4">
+        <h3 className="font-semibold text-lg">Contact Information</h3>
+        
+        <div className="space-y-2">
+          <Label htmlFor="name">Name *</Label>
+          <Input
+            id="name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Your name"
+            className={errors.name ? "border-destructive" : ""}
+          />
+          {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="email">Email Address *</Label>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="your@email.com"
+              className={errors.email ? "border-destructive" : ""}
+            />
+            {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="contact">Contact Number *</Label>
+            <Input
+              id="contact"
+              type="tel"
+              value={contact}
+              onChange={(e) => setContact(e.target.value)}
+              placeholder="(555) 123-4567"
+              className={errors.contact ? "border-destructive" : ""}
+            />
+            {errors.contact && <p className="text-sm text-destructive">{errors.contact}</p>}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="zip">ZIP/Postal Code *</Label>
+          <Input
+            id="zip"
+            value={zip}
+            onChange={(e) => setZip(e.target.value)}
+            placeholder="12345"
+            className={errors.zip ? "border-destructive" : ""}
+          />
+          {errors.zip && <p className="text-sm text-destructive">{errors.zip}</p>}
+        </div>
+
+        {errors.contact && <p className="text-sm text-destructive">{errors.contact}</p>}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="notes">Additional Notes (Optional)</Label>
+        <Textarea
+          id="notes"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Any specific requirements or questions about the part..."
+          rows={3}
+        />
+      </div>
+
+      {/* Website field is hardcoded and not shown in UI */}
+
+      <div className="flex items-start space-x-2 mt-4">
+        <Checkbox 
+          id="gdpr" 
+          checked={gdprConsent} 
+          onCheckedChange={(checked) => setGdprConsent(checked === true)}
+          className="mt-0.5"
+        />
+        <div className="space-y-1">
+          <label
+            htmlFor="gdpr"
+            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+          >
+            I agree to the <Link href="/terms" className="text-primary hover:underline">Terms & Conditions</Link> and <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>
+          </label>
+        </div>
+      </div>
+      
+      {errors.gdpr && <p className="text-sm text-destructive">{errors.gdpr}</p>}
+
+      <Button type="submit" className="w-full" size="lg">
+        Request Quote
+      </Button>
+    </form>
+  )
+}
